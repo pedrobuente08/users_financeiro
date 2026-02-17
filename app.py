@@ -2,157 +2,251 @@ import streamlit as st
 from supabase import create_client, Client
 import pandas as pd
 
-# 1. Configurações do Supabase
-SUPABASE_URL = "https://rdzgzvyxlaszygxchzlp.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkemd6dnl4bGFzenlneGNoemxwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk3ODg0MzEsImV4cCI6MjA4NTM2NDQzMX0.NBQvzCzMYvUkxFQNR06gOK9otavlDKh3b9U4se5mEBA"  # Recomendo manter em segredo!
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
 st.set_page_config(page_title="Gestão Financeira", layout="centered")
 
-# --- INICIALIZAÇÃO DO ESTADO (Previne erros de atributo) ---
-if 'logado' not in st.session_state:
-    st.session_state.logado = False
-if 'user_id' not in st.session_state:
-    st.session_state.user_id = None
-if 'name' not in st.session_state:
-    st.session_state.name = None
+SUPABASE_URL = "https://rdzgzvyxlaszygxchzlp.supabase.co"
+SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkemd6dnl4bGFzenlneGNoemxwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk3ODg0MzEsImV4cCI6MjA4NTM2NDQzMX0.NBQvzCzMYvUkxFQNR06gOK9otavlDKh3b9U4se5mEBA"
 
-# --- FUNÇÕES DE BANCO ---
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
 
-def usuario_existe(user_id):
-    res = supabase.table("users_plataform").select(
-        "user_id").eq("user_id", user_id).execute()
-    return len(res.data) > 0
+# -------------------------------
+# Util
+# -------------------------------
 
-
-def cadastrar_usuario(nome, celular, login, senha):
-    dados = {"name": nome, "user_id": celular,
-             "login": login, "password": senha}
+def get_user_from_token(token: str):
     try:
-        supabase.table("users_plataform").insert(dados).execute()
-        return True, "✅ Cadastro realizado com sucesso! Faça o login."
-    except Exception as e:
-        return False, f"Erro: {str(e)}"
+        res = supabase.auth.get_user(token)
+        return res.user
+    except Exception:
+        return None
 
 
-def verificar_login(login, senha):
-    res = supabase.table("users_plataform").select(
-        "*").eq("login", login).eq("password", senha).execute()
-    return res.data[0] if len(res.data) > 0 else None
+# -------------------------------
+# Sessão
+# -------------------------------
+
+if "user" not in st.session_state:
+    st.session_state.user = None
+
+if "profile" not in st.session_state:
+    st.session_state.profile = None
+
+if "token" not in st.session_state:
+    st.session_state.token = None
 
 
-# --- INTERFACE DE ACESSO ---
-if not st.session_state.logado:
-    aba = st.tabs(["Login", "Criar Conta"])
+# -------------------------------
+# Lê token da URL
+# -------------------------------
 
-    with aba[0]:
-        st.header("Entrar")
-        login_user = st.text_input("Login (ou Celular)")
-        senha_user = st.text_input("Senha", type="password")
+query_params = st.query_params
+token = query_params.get("token", None)
 
-        if st.button("Acessar Sistema"):
-            user = verificar_login(login_user, senha_user)
-            if user:
-                st.session_state.logado = True
-                st.session_state.user_id = user['user_id']
-                st.session_state.name = user['name']
+
+# -------------------------------
+# Autenticação
+# -------------------------------
+
+if st.session_state.user is None:
+
+    if not token:
+        st.markdown('<meta http-equiv="refresh" content="0; url=http://localhost:3000">', unsafe_allow_html=True)
+        st.stop()
+
+    user = get_user_from_token(token)
+
+    if not user:
+        st.markdown('<meta http-equiv="refresh" content="0; url=http://localhost:3000">', unsafe_allow_html=True)
+        st.stop()
+
+    # autentica o cliente com o JWT do usuário para respeitar o RLS
+    supabase.postgrest.auth(token)
+
+    # carrega perfil
+    profile = (
+        supabase
+        .table("users_plataform")
+        .select("*")
+        .eq("auth_user_id", user.id)
+        .maybe_single()
+        .execute()
+    )
+
+    if not profile or not profile.data:
+        st.title("Complete seu cadastro")
+        st.write("Precisamos de mais alguns dados para liberar o dashboard.")
+
+        with st.form("form_perfil"):
+            nome = st.text_input("Nome completo")
+            telefone = st.text_input("Telefone (ex: 5511999999999)")
+            submitted = st.form_submit_button("Salvar e continuar")
+
+        if submitted:
+            digits = ''.join(filter(str.isdigit, telefone))
+            if not nome.strip() or not telefone.strip():
+                st.error("Preencha todos os campos.")
+            elif len(digits) != 13:
+                st.error("Telefone inválido. Use 13 dígitos: código do país (55) + DDD + número. Ex: 5511999999999")
+            else:
+                supabase.table("users_plataform").insert({
+                    "auth_user_id": user.id,
+                    "name": nome.strip(),
+                    "phone": digits,
+                }).execute()
+                st.success("Perfil criado! Recarregando...")
                 st.rerun()
-            else:
-                st.error("Login ou senha incorretos.")
 
-    with aba[1]:
-        st.header("Novo Cadastro")
-        novo_nome = st.text_input("Nome Completo")
-        novo_celular = st.text_input("Celular (Ex: 5573991770000)")
-        novo_login = st.text_input("Crie um Nome de Usuário")
-        nova_senha = st.text_input("Crie uma Senha", type="password")
+        st.stop()
 
-        if st.button("Finalizar Cadastro"):
-            if novo_nome and novo_celular and nova_senha:
-                sucesso, msg = cadastrar_usuario(
-                    novo_nome, novo_celular, novo_login, nova_senha)
-                if sucesso:
-                    st.success(msg)
-                else:
-                    st.error(msg)
-            else:
-                st.warning("Preencha todos os campos obrigatórios.")
+    # só salva na sessão se tudo deu certo
+    st.session_state.user = user
+    st.session_state.profile = profile.data
+    st.session_state.token = token
 
-# --- DASHBOARD (SÓ EXECUTA SE ESTIVER LOGADO) ---
-else:
-    st.sidebar.write(f"Bem-vindo, **{st.session_state.name}**")
-    if st.sidebar.button("Sair"):
-        st.session_state.logado = False
-        st.session_state.user_id = None
-        st.rerun()
 
-    # --- TRATAMENTO DO ID ---
-    user_id_bruto = str(st.session_state.user_id).strip()
+# -------------------------------
+# DASHBOARD
+# -------------------------------
 
-    # Lógica do 9º dígito (Brasil: 13 caracteres -> 12 caracteres)
-    if len(user_id_bruto) == 13 and user_id_bruto.startswith("55"):
-        user_id_consulta = user_id_bruto[:4] + user_id_bruto[5:]
-    else:
-        user_id_consulta = user_id_bruto
+user = st.session_state.user
+profile = st.session_state.profile
+token = st.session_state.token
 
-    # --- BUSCA DE DADOS ---
-    res_financeiro = supabase.table("balanco").select(
-        "*").eq("user_id", user_id_consulta).execute()
-    df = pd.DataFrame(res_financeiro.data)
+if user is None or profile is None or token is None:
+    st.markdown('<meta http-equiv="refresh" content="0; url=http://localhost:3000">', unsafe_allow_html=True)
+    st.stop()
 
-    st.title(f"📊 Dashboard de {st.session_state.name}")
+# garante JWT nas queries do dashboard
+supabase.postgrest.auth(token)
 
-    if df.empty:
-        st.warning(f"Nenhum dado encontrado para o ID: {user_id_consulta}")
-        st.info("Envie seus gastos pelo WhatsApp para atualizar esta página.")
-    else:
-        # Tratamento de dados
-        df['data'] = pd.to_datetime(df['data'], errors='coerce')
-        df['valor'] = pd.to_numeric(df['valor'], errors='coerce').fillna(0)
-        df = df.dropna(subset=['data'])
-        df['mes_ano'] = df['data'].dt.strftime('%m/%Y')
+st.sidebar.write(f"Bem-vindo, **{profile['name']}**")
 
-        # Filtros laterais
-        st.sidebar.divider()
-        meses_disponiveis = sorted(df['mes_ano'].unique(), reverse=True)
-        mes_filtro = st.sidebar.multiselect(
-            "Filtrar Meses:", meses_disponiveis, default=meses_disponiveis)
+if st.sidebar.button("Sair"):
+    st.session_state.user = None
+    st.session_state.profile = None
+    st.query_params.clear()
+    st.rerun()
 
-        df_filtrado = df[df['mes_ano'].isin(mes_filtro)]
 
-        # --- MÉTRICAS ---
-        col1, col2, col3 = st.columns(3)
-        entradas = df_filtrado[df_filtrado['tipo'].str.contains(
-            'entrada', case=False, na=False)]['valor'].sum()
-        saidas = df_filtrado[df_filtrado['tipo'].str.contains(
-            'saída|saida', case=False, na=False)]['valor'].sum()
-        saldo = entradas - saidas
+st.title(f"📊 Dashboard de {profile['name']}")
 
-        col1.metric("Ganhos", f"R$ {entradas:,.2f}")
-        col2.metric("Gastos", f"R$ {saidas:,.2f}", delta_color="inverse")
-        col3.metric("Saldo", f"R$ {saldo:,.2f}")
+phone = profile["phone"]
 
-        # --- GRÁFICOS ---
-        st.divider()
-        c1, c2 = st.columns(2)
-        with c1:
-            st.write("**💰 Gastos por Categoria**")
-            gastos_cat = df_filtrado[df_filtrado['tipo'].str.contains(
-                'saída|saida', case=False, na=False)].groupby('categoria')['valor'].sum()
-            if not gastos_cat.empty:
-                st.bar_chart(gastos_cat)
-        with c2:
-            st.write("**📈 Evolução Diária**")
-            evolucao = df_filtrado.groupby(df_filtrado['data'].dt.date)[
-                'valor'].sum()
-            st.line_chart(evolucao)
+# normaliza: gera os dois formatos possíveis (com e sem o 9 extra após o DDD)
+# Exemplo: 5573991775430 (13 dígitos) ↔ 557391775430 (12 dígitos)
+def phone_variants(p: str) -> list:
+    p = p.strip()
+    variants = [p]
+    if len(p) == 13 and p[4] == '9':    # tem o 9 extra → gera sem ele
+        variants.append(p[:4] + p[5:])
+    elif len(p) == 12:                   # sem o 9 extra → gera com ele
+        variants.append(p[:4] + '9' + p[4:])
+    return variants
 
-        # --- TABELA ---
-        st.divider()
-        st.subheader("📝 Histórico Detalhado")
-        df_display = df_filtrado[['data', 'item',
-                                  'categoria', 'tipo', 'valor']].copy()
-        df_display['data'] = df_display['data'].dt.strftime('%d/%m/%Y')
-        st.dataframe(df_display.sort_values(by='data', ascending=False),
-                     use_container_width=True, hide_index=True)
+
+# -------------------------------
+# BUSCA FINANCEIRO
+# -------------------------------
+
+res = (
+    supabase
+    .table("balanco")
+    .select("*")
+    .in_("user_id", phone_variants(phone))
+    .execute()
+)
+
+df = pd.DataFrame(res.data)
+
+if df.empty:
+    st.warning("Nenhum dado financeiro encontrado.")
+    st.stop()
+
+
+# -------------------------------
+# Tratamento
+# -------------------------------
+
+df["data"] = pd.to_datetime(df["data"], errors="coerce")
+df["valor"] = pd.to_numeric(df["valor"], errors="coerce").fillna(0)
+
+df = df.dropna(subset=["data"])
+df["mes_ano"] = df["data"].dt.strftime("%m/%Y")
+
+
+# -------------------------------
+# Filtros
+# -------------------------------
+
+st.sidebar.divider()
+
+meses = sorted(df["mes_ano"].unique(), reverse=True)
+
+mes_filtro = st.sidebar.multiselect(
+    "Filtrar meses",
+    meses,
+    default=meses
+)
+
+df = df[df["mes_ano"].isin(mes_filtro)]
+
+
+# -------------------------------
+# Métricas
+# -------------------------------
+
+col1, col2, col3 = st.columns(3)
+
+entradas = df[df["tipo"].str.contains(
+    "entrada", case=False, na=False)]["valor"].sum()
+saidas = df[df["tipo"].str.contains(
+    "saída|saida", case=False, na=False)]["valor"].sum()
+
+saldo = entradas - saidas
+
+col1.metric("Ganhos", f"R$ {entradas:,.2f}")
+col2.metric("Gastos", f"R$ {saidas:,.2f}", delta_color="inverse")
+col3.metric("Saldo", f"R$ {saldo:,.2f}")
+
+
+# -------------------------------
+# Gráficos
+# -------------------------------
+
+st.divider()
+
+c1, c2 = st.columns(2)
+
+with c1:
+    st.write("💰 Gastos por categoria")
+    gastos_cat = (
+        df[df["tipo"].str.contains("saída|saida", case=False, na=False)]
+        .groupby("categoria")["valor"]
+        .sum()
+    )
+
+    if not gastos_cat.empty:
+        st.bar_chart(gastos_cat)
+
+with c2:
+    st.write("📈 Evolução diária")
+    evolucao = df.groupby(df["data"].dt.date)["valor"].sum()
+    st.line_chart(evolucao)
+
+
+# -------------------------------
+# Tabela
+# -------------------------------
+
+st.divider()
+st.subheader("Histórico")
+
+df_view = df[["data", "item", "categoria", "tipo", "valor"]].copy()
+df_view["data"] = df_view["data"].dt.strftime("%d/%m/%Y")
+
+st.dataframe(
+    df_view.sort_values(by="data", ascending=False),
+    use_container_width=True,
+    hide_index=True
+)
