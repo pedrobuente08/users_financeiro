@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  next-app:
+    build:
+      context: ./web-auth
+      dockerfile: Dockerfile
+    restart: always
+
+  streamlit-dashboard:
+    build:
+      context: .
+      dockerfile: dockerfile
+    restart: always
