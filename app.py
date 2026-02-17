@@ -4,8 +4,12 @@ import pandas as pd
 
 st.set_page_config(page_title="Gestão Financeira", layout="centered")
 
-SUPABASE_URL = "https://rdzgzvyxlaszygxchzlp.supabase.co"
-SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkemd6dnl4bGFzenlneGNoemxwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk3ODg0MzEsImV4cCI6MjA4NTM2NDQzMX0.NBQvzCzMYvUkxFQNR06gOK9otavlDKh3b9U4se5mEBA"
+# SUPABASE_URL = "https://rdzgzvyxlaszygxchzlp.supabase.co"
+# SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkemd6dnl4bGFzenlneGNoemxwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk3ODg0MzEsImV4cCI6MjA4NTM2NDQzMX0.NBQvzCzMYvUkxFQNR06gOK9otavlDKh3b9U4se5mEBA"
+SUPABASE_URL = os.getenv("SUPABASE_URL") or st.secrets.get("SUPABASE_URL")
+SUPABASE_KEY = os.getenv(
+    "SUPABASE_ANON_KEY") or st.secrets.get("SUPABASE_ANON_KEY")
+
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
 
@@ -51,13 +55,15 @@ token = query_params.get("token", None)
 if st.session_state.user is None:
 
     if not token:
-        st.markdown('<meta http-equiv="refresh" content="0; url=http://localhost:3000">', unsafe_allow_html=True)
+        st.markdown(
+            '<meta http-equiv="refresh" content="0; url=http://localhost:3000">', unsafe_allow_html=True)
         st.stop()
 
     user = get_user_from_token(token)
 
     if not user:
-        st.markdown('<meta http-equiv="refresh" content="0; url=http://localhost:3000">', unsafe_allow_html=True)
+        st.markdown(
+            '<meta http-equiv="refresh" content="0; url=http://localhost:3000">', unsafe_allow_html=True)
         st.stop()
 
     # autentica o cliente com o JWT do usuário para respeitar o RLS
@@ -87,7 +93,8 @@ if st.session_state.user is None:
             if not nome.strip() or not telefone.strip():
                 st.error("Preencha todos os campos.")
             elif len(digits) != 13:
-                st.error("Telefone inválido. Use 13 dígitos: código do país (55) + DDD + número. Ex: 5511999999999")
+                st.error(
+                    "Telefone inválido. Use 13 dígitos: código do país (55) + DDD + número. Ex: 5511999999999")
             else:
                 supabase.table("users_plataform").insert({
                     "auth_user_id": user.id,
@@ -114,7 +121,8 @@ profile = st.session_state.profile
 token = st.session_state.token
 
 if user is None or profile is None or token is None:
-    st.markdown('<meta http-equiv="refresh" content="0; url=http://localhost:3000">', unsafe_allow_html=True)
+    st.markdown('<meta http-equiv="refresh" content="0; url=http://localhost:3000">',
+                unsafe_allow_html=True)
     st.stop()
 
 # garante JWT nas queries do dashboard
@@ -135,6 +143,8 @@ phone = profile["phone"]
 
 # normaliza: gera os dois formatos possíveis (com e sem o 9 extra após o DDD)
 # Exemplo: 5573991775430 (13 dígitos) ↔ 557391775430 (12 dígitos)
+
+
 def phone_variants(p: str) -> list:
     p = p.strip()
     variants = [p]
