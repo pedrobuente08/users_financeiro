@@ -16,7 +16,7 @@ export default function DashboardRedirect() {
       }
 
       const token = data.session.access_token
-      window.location.href = `http://localhost:8501/?token=${token}`
+      window.location.href = `http://rcoosc44s8ww0kos8goc448w.76.13.228.213.sslip.io/?token=${token}`
     }
 
     goToStreamlit()
