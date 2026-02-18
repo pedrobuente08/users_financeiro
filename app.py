@@ -1,6 +1,7 @@
 import streamlit as st
 from supabase import create_client, Client
 import pandas as pd
+import os
 
 st.set_page_config(page_title="Gestão Financeira", layout="centered")
 
@@ -11,7 +12,7 @@ SUPABASE_KEY = os.getenv(
     "SUPABASE_ANON_KEY") or st.secrets.get("SUPABASE_ANON_KEY")
 
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 
 # -------------------------------
