@@ -57,14 +57,14 @@ if st.session_state.user is None:
 
     if not token:
         st.markdown(
-            '<meta http-equiv="refresh" content="0; url=http://localhost:3000">', unsafe_allow_html=True)
+            '<meta http-equiv="refresh" content="0; url=https://login.tattoohubink.cloud">', unsafe_allow_html=True)
         st.stop()
 
     user = get_user_from_token(token)
 
     if not user:
         st.markdown(
-            '<meta http-equiv="refresh" content="0; url=http://localhost:3000">', unsafe_allow_html=True)
+            '<meta http-equiv="refresh" content="0; url=https://login.tattoohubink.cloud">', unsafe_allow_html=True)
         st.stop()
 
     # autentica o cliente com o JWT do usuário para respeitar o RLS
@@ -122,7 +122,7 @@ profile = st.session_state.profile
 token = st.session_state.token
 
 if user is None or profile is None or token is None:
-    st.markdown('<meta http-equiv="refresh" content="0; url=http://localhost:3000">',
+    st.markdown('<meta http-equiv="refresh" content="0; url=https://login.tattoohubink.cloud">',
                 unsafe_allow_html=True)
     st.stop()
 
